@@ -1,0 +1,34 @@
+---
+- name: Setup and Deploy Application
+  hosts: app_servers
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Wait for system to become reachable
+      wait_for_connection:
+        timeout: 300
+
+    - name: Gather facts
+      setup:
+
+  roles:
+    - role: dependencies
+      tags: 
+        - dependencies
+        - setup
+
+    - role: deploy
+      tags:
+        - deploy
+        - application
+
+  post_tasks:
+    - name: Ensure all Docker services are running
+      command: docker ps
+      register: docker_ps
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        var: docker_ps.stdout_lines

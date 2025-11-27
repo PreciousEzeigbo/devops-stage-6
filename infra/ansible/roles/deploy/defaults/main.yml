@@ -1,0 +1,6 @@
+---
+# defaults file for deploy
+app_directory: "/opt/app"
+github_branch: "main"
+traefik_dashboard_user: "admin"
+traefik_dashboard_password: "changeme"

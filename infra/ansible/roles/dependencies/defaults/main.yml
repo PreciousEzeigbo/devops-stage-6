@@ -1,0 +1,4 @@
+---
+# defaults file for dependencies
+docker_compose_version: "2.23.0"
+app_directory: "/opt/app"

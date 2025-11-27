@@ -1,0 +1,92 @@
+# .gitignore for DevOps Stage 6
+
+# Environment files
+.env
+*.env
+!.env.example
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/.terraform.lock.hcl
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
+infra/terraform/*.tfvars
+!infra/terraform/*.tfvars.example
+infra/terraform/tfplan
+infra/terraform/outputs.json
+
+# Ansible
+infra/ansible/inventory/hosts.ini
+infra/ansible/*.retry
+infra/ansible/.ansible/
+/tmp/ansible_facts/
+
+# SSH Keys
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+*.ppk
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Node
+node_modules/
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Java
+target/
+*.class
+*.jar
+!*-wrapper.jar
+*.war
+*.ear
+
+# Go
+*.exe
+*.test
+*.out
+vendor/
+
+# Build outputs
+dist/
+build/
+*.tar.gz
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+secrets/
+*.secret
+credentials.json

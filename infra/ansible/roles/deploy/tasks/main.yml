@@ -1,0 +1,72 @@
+---
+# tasks file for deploy
+- name: Check if repository exists
+  stat:
+    path: "{{ app_directory }}/.git"
+  register: git_repo
+
+- name: Clone application repository
+  git:
+    repo: "{{ github_repo }}"
+    dest: "{{ app_directory }}"
+    version: "{{ github_branch }}"
+    force: yes
+  when: not git_repo.stat.exists
+
+- name: Pull latest changes from repository
+  git:
+    repo: "{{ github_repo }}"
+    dest: "{{ app_directory }}"
+    version: "{{ github_branch }}"
+    force: yes
+  when: git_repo.stat.exists
+  register: git_pull
+
+- name: Generate htpasswd for Traefik dashboard
+  shell: |
+    echo $(htpasswd -nb {{ traefik_dashboard_user | default('admin') }} {{ traefik_dashboard_password | default('admin') }}) | sed -e s/\\$/\\$\\$/g
+  register: traefik_htpasswd
+  changed_when: false
+  no_log: true
+
+- name: Create .env file for docker-compose
+  template:
+    src: env.j2
+    dest: "{{ app_directory }}/.env"
+    mode: '0600'
+  register: env_file
+
+- name: Stop existing containers if configuration changed
+  docker_compose:
+    project_src: "{{ app_directory }}"
+    state: absent
+  when: env_file.changed or git_pull.changed
+  ignore_errors: yes
+
+- name: Pull Docker images
+  docker_compose:
+    project_src: "{{ app_directory }}"
+    pull: yes
+  register: docker_pull
+
+- name: Build and start Docker containers
+  docker_compose:
+    project_src: "{{ app_directory }}"
+    build: yes
+    state: present
+  register: docker_compose_result
+
+- name: Wait for services to be healthy
+  wait_for:
+    host: localhost
+    port: 443
+    delay: 10
+    timeout: 300
+    state: started
+
+- name: Display deployment status
+  debug:
+    msg: 
+      - "Deployment completed successfully!"
+      - "Application URL: https://{{ domain }}"
+      - "Traefik Dashboard: https://traefik.{{ domain }}"

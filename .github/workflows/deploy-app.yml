@@ -1,0 +1,239 @@
+name: Application Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "auth-api/**"
+      - "todos-api/**"
+      - "users-api/**"
+      - "log-message-processor/**"
+      - "docker-compose.yml"
+      - ".github/workflows/deploy-app.yml"
+  workflow_dispatch:
+
+env:
+  ANSIBLE_VERSION: "2.15.0"
+
+jobs:
+  detect-changes:
+    name: Detect Service Changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      auth-api: ${{ steps.changes.outputs.auth-api }}
+      todos-api: ${{ steps.changes.outputs.todos-api }}
+      users-api: ${{ steps.changes.outputs.users-api }}
+      log-processor: ${{ steps.changes.outputs.log-processor }}
+      docker-compose: ${{ steps.changes.outputs.docker-compose }}
+      any-change: ${{ steps.changes.outputs.any-change }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+            echo "auth-api=true" >> $GITHUB_OUTPUT
+            echo "todos-api=true" >> $GITHUB_OUTPUT
+            echo "users-api=true" >> $GITHUB_OUTPUT
+            echo "log-processor=true" >> $GITHUB_OUTPUT
+            echo "docker-compose=true" >> $GITHUB_OUTPUT
+            echo "any-change=true" >> $GITHUB_OUTPUT
+          else
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            
+            echo "frontend=$(echo "$CHANGED_FILES" | grep -q '^frontend/' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+            echo "auth-api=$(echo "$CHANGED_FILES" | grep -q '^auth-api/' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+            echo "todos-api=$(echo "$CHANGED_FILES" | grep -q '^todos-api/' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+            echo "users-api=$(echo "$CHANGED_FILES" | grep -q '^users-api/' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+            echo "log-processor=$(echo "$CHANGED_FILES" | grep -q '^log-message-processor/' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+            echo "docker-compose=$(echo "$CHANGED_FILES" | grep -q 'docker-compose.yml' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+            
+            if echo "$CHANGED_FILES" | grep -qE '^(frontend|auth-api|todos-api|users-api|log-message-processor|docker-compose.yml)'; then
+              echo "any-change=true" >> $GITHUB_OUTPUT
+            else
+              echo "any-change=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Generate change summary
+        run: |
+          echo "## Changed Services" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ${{ steps.changes.outputs.frontend }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Auth API: ${{ steps.changes.outputs.auth-api }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Todos API: ${{ steps.changes.outputs.todos-api }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Users API: ${{ steps.changes.outputs.users-api }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Log Processor: ${{ steps.changes.outputs.log-processor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker Compose: ${{ steps.changes.outputs.docker-compose }}" >> $GITHUB_STEP_SUMMARY
+
+  deploy-application:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any-change == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible
+        run: |
+          pip install ansible==${{ env.ANSIBLE_VERSION }}
+          pip install boto3 botocore
+
+      - name: Install Ansible Collections
+        working-directory: infra/ansible
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+
+      - name: Configure AWS Credentials (for dynamic inventory)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Get Server IP from AWS
+        id: server-ip
+        run: |
+          SERVER_IP=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=devops-stage-6-server" \
+                      "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "ip=$SERVER_IP" >> $GITHUB_OUTPUT
+          echo "Server IP: $SERVER_IP"
+
+      - name: Create Ansible Inventory
+        working-directory: infra/ansible
+        run: |
+          mkdir -p inventory
+          cat > inventory/hosts.ini <<EOF
+          [app_servers]
+          app_server ansible_host=${{ steps.server-ip.outputs.ip }} ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
+
+          [app_servers:vars]
+          domain=${{ secrets.DOMAIN }}
+          acme_email=${{ secrets.ACME_EMAIL }}
+          jwt_secret=${{ secrets.JWT_SECRET }}
+          github_repo=${{ github.server_url }}/${{ github.repository }}.git
+          github_branch=main
+          ansible_python_interpreter=/usr/bin/python3
+          traefik_dashboard_user=${{ secrets.TRAEFIK_USER }}
+          traefik_dashboard_password=${{ secrets.TRAEFIK_PASSWORD }}
+          EOF
+
+      - name: Test SSH Connection
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${{ steps.server-ip.outputs.ip }} "echo 'SSH connection successful'"
+
+      - name: Run Ansible Deployment
+        working-directory: infra/ansible
+        run: |
+          ansible-playbook -i inventory/hosts.ini playbook.yml --tags deploy -v
+
+      - name: Wait for Application
+        run: |
+          echo "Waiting for application to be healthy..."
+          sleep 30
+
+          MAX_ATTEMPTS=10
+          ATTEMPT=0
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if curl -f -k https://${{ secrets.DOMAIN }} > /dev/null 2>&1; then
+              echo "Application is healthy!"
+              break
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - waiting..."
+            sleep 10
+          done
+
+      - name: Verify Deployment
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Application URL:** https://${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "**API Endpoints:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Auth API: https://${{ secrets.DOMAIN }}/api/auth" >> $GITHUB_STEP_SUMMARY
+          echo "- Todos API: https://${{ secrets.DOMAIN }}/api/todos" >> $GITHUB_STEP_SUMMARY
+          echo "- Users API: https://${{ secrets.DOMAIN }}/api/users" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Services Deployed:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ${{ needs.detect-changes.outputs.frontend }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Auth API: ${{ needs.detect-changes.outputs.auth-api }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Todos API: ${{ needs.detect-changes.outputs.todos-api }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Users API: ${{ needs.detect-changes.outputs.users-api }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Log Processor: ${{ needs.detect-changes.outputs.log-processor }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Send Deployment Notification
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "✅ Application Deployment Successful"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: ${{ secrets.SMTP_FROM_EMAIL }}
+          body: |
+            Application deployment completed successfully!
+
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Deployed by: ${{ github.actor }}
+
+            Application URL: https://${{ secrets.DOMAIN }}
+
+            Changed Services:
+            - Frontend: ${{ needs.detect-changes.outputs.frontend }}
+            - Auth API: ${{ needs.detect-changes.outputs.auth-api }}
+            - Todos API: ${{ needs.detect-changes.outputs.todos-api }}
+            - Users API: ${{ needs.detect-changes.outputs.users-api }}
+            - Log Processor: ${{ needs.detect-changes.outputs.log-processor }}
+
+            Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Send Failure Notification
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "❌ Application Deployment Failed"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: ${{ secrets.SMTP_FROM_EMAIL }}
+          body: |
+            Application deployment failed!
+
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+
+            Please check the workflow logs for details.
+
+            Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
