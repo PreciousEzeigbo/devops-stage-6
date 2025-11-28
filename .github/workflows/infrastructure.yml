@@ -64,14 +64,16 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: infra/terraform
         run: |
-          cat > terraform.tfvars <<EOF
+          cat > terraform.tfvars <<'TFVARS'
           aws_region               = "${{ secrets.AWS_REGION }}"
           vpc_id                   = "${{ secrets.VPC_ID }}"
           subnet_id                = "${{ secrets.SUBNET_ID }}"
           instance_type            = "t3.medium"
           project_name             = "devops-stage-6"
           environment              = "production"
-          ssh_public_key           = "${{ secrets.SSH_PUBLIC_KEY }}"
+          ssh_public_key           = <<-EOT
+          ${{ secrets.SSH_PUBLIC_KEY }}
+          EOT
           ssh_private_key_path     = "~/.ssh/id_rsa"
           ssh_user                 = "ubuntu"
           domain                   = "${{ secrets.DOMAIN }}"
@@ -82,7 +84,7 @@ jobs:
           traefik_dashboard_user   = "admin"
           traefik_dashboard_password = "${{ secrets.TRAEFIK_DASHBOARD_PASSWORD }}"
           run_ansible              = true
-          EOF
+          TFVARS
 
       - name: Terraform Init
         working-directory: infra/terraform
@@ -214,14 +216,16 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: infra/terraform
         run: |
-          cat > terraform.tfvars <<EOF
+          cat > terraform.tfvars <<'TFVARS'
           aws_region               = "${{ secrets.AWS_REGION }}"
           vpc_id                   = "${{ secrets.VPC_ID }}"
           subnet_id                = "${{ secrets.SUBNET_ID }}"
           instance_type            = "t3.medium"
           project_name             = "devops-stage-6"
           environment              = "production"
-          ssh_public_key           = "${{ secrets.SSH_PUBLIC_KEY }}"
+          ssh_public_key           = <<-EOT
+          ${{ secrets.SSH_PUBLIC_KEY }}
+          EOT
           ssh_private_key_path     = "~/.ssh/id_rsa"
           ssh_user                 = "ubuntu"
           domain                   = "${{ secrets.DOMAIN }}"
@@ -232,7 +236,7 @@ jobs:
           traefik_dashboard_user   = "admin"
           traefik_dashboard_password = "${{ secrets.TRAEFIK_DASHBOARD_PASSWORD }}"
           run_ansible              = true
-          EOF
+          TFVARS
 
       - name: Terraform Init
         working-directory: infra/terraform
