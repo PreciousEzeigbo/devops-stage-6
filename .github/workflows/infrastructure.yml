@@ -144,7 +144,6 @@ jobs:
     if: needs.terraform-plan.outputs.drift_detected == 'true'
     environment:
       name: production
-      url: https://${{ secrets.DOMAIN }}
 
     steps:
       - name: Wait for Approval
