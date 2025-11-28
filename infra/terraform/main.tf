@@ -1,3 +1,4 @@
+# DevOps Stage 6 - Infrastructure as Code
 terraform {
   required_version = ">= 1.0"
   required_providers {
