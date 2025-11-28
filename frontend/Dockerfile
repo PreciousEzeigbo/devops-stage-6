@@ -3,10 +3,10 @@ FROM node:12-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache python2 make g++
 
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm install --legacy-peer-deps
 
-COPY . .
+COPY frontend/ .
 RUN npm run build
 
 FROM node:20-alpine
