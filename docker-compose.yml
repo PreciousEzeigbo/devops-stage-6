@@ -69,6 +69,11 @@ services:
       - app-network
     labels:
       - "traefik.enable=true"
+      # Route for /login endpoint
+      - "traefik.http.routers.auth-login.rule=Host(`${DOMAIN}`) && Path(`/login`)"
+      - "traefik.http.routers.auth-login.entrypoints=websecure"
+      - "traefik.http.routers.auth-login.tls.certresolver=letsencrypt"
+      # Route for /api/auth endpoints
       - "traefik.http.routers.auth-api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/auth`)"
       - "traefik.http.routers.auth-api.entrypoints=websecure"
       - "traefik.http.routers.auth-api.tls.certresolver=letsencrypt"
