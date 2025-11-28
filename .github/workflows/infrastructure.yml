@@ -201,8 +201,8 @@ jobs:
           jwt_secret               = "${{ secrets.JWT_SECRET }}"
           github_repo              = "${{ github.server_url }}/${{ github.repository }}.git"
           github_branch            = "main"
-          traefik_dashboard_user   = "${{ secrets.TRAEFIK_USER }}"
-          traefik_dashboard_password = "${{ secrets.TRAEFIK_PASSWORD }}"
+          traefik_dashboard_user   = "admin"
+          traefik_dashboard_password = "${{ secrets.TRAEFIK_DASHBOARD_PASSWORD }}"
           run_ansible              = true
           EOF
 
