@@ -36,25 +36,40 @@
     mode: '0600'
   register: env_file
 
+- name: Set config changed flag
+  set_fact:
+    config_changed: "{{ env_file.changed or (git_pull is defined and git_pull.changed) }}"
+
+- name: Copy docker-compose.yml to server
+  copy:
+    src: ../../../../docker-compose.yml
+    dest: "{{ app_directory }}/docker-compose.yml"
+    mode: '0644'
+
 - name: Stop existing containers if configuration changed
-  docker_compose:
-    project_src: "{{ app_directory }}"
-    state: absent
-  when: env_file.changed or git_pull.changed
+  command: docker compose down
+  args:
+    chdir: "{{ app_directory }}"
+  when: config_changed
   ignore_errors: yes
 
 - name: Pull Docker images
-  docker_compose:
-    project_src: "{{ app_directory }}"
-    pull: yes
+  command: docker compose pull
+  args:
+    chdir: "{{ app_directory }}"
   register: docker_pull
 
-- name: Build and start Docker containers
-  docker_compose:
-    project_src: "{{ app_directory }}"
-    build: yes
-    state: present
-  register: docker_compose_result
+- name: Build Docker images
+  command: docker compose build
+  args:
+    chdir: "{{ app_directory }}"
+  register: docker_build
+
+- name: Start Docker containers
+  command: docker compose up -d
+  args:
+    chdir: "{{ app_directory }}"
+  register: docker_up
 
 - name: Wait for services to be healthy
   wait_for:

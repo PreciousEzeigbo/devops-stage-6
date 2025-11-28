@@ -3,7 +3,7 @@
 # Environment files
 .env
 *.env
-!.env.example
+.env.example
 
 # Terraform
 infra/terraform/.terraform/
@@ -83,8 +83,6 @@ build/
 *.zip
 
 # OS
-.DS_Store
-Thumbs.db
 
 # Secrets
 secrets/

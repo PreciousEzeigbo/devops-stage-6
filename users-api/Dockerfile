@@ -2,10 +2,10 @@ FROM maven:3.6.3-openjdk-11 AS builder
 
 WORKDIR /app
 
-COPY pom.xml .
+COPY users-api/pom.xml .
 RUN mvn dependency:go-offline
 
-COPY /src ./src
+COPY users-api/src ./src
 RUN mvn package -DskipTests
 
 FROM eclipse-temurin:11-jre-alpine
