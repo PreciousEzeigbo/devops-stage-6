@@ -318,7 +318,7 @@ jobs:
     name: Terraform Destroy
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'destroy'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
