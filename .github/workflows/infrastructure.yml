@@ -34,6 +34,7 @@ jobs:
   terraform-plan:
     name: Terraform Plan & Drift Detection
     runs-on: ubuntu-latest
+    if: github.event.inputs.action != 'destroy'
     outputs:
       drift_detected: ${{ steps.plan.outputs.drift_detected }}
       plan_exitcode: ${{ steps.plan.outputs.exitcode }}
@@ -187,6 +188,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [terraform-plan, await-approval]
     if: |
+      github.event.inputs.action != 'destroy' &&
       always() && 
       (needs.terraform-plan.outputs.drift_detected == 'false' || 
        (needs.terraform-plan.outputs.drift_detected == 'true' && needs.await-approval.result == 'success'))
@@ -272,7 +274,7 @@ jobs:
     name: Ansible Deployment
     runs-on: ubuntu-latest
     needs: terraform-apply
-    if: success()
+    if: github.event.inputs.action != 'destroy' && success()
 
     steps:
       - name: Checkout code
