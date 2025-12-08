@@ -313,3 +313,45 @@ jobs:
           echo "1. Visit your application at https://${{ secrets.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
           echo "2. Test the API endpoints" >> $GITHUB_STEP_SUMMARY
           echo "3. Monitor the application logs" >> $GITHUB_STEP_SUMMARY
+
+  terraform-destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: infra/terraform
+        run: terraform destroy -auto-approve
+
+      - name: Destroy Complete
+        run: |
+          echo "## 🗑️ Infrastructure Destroyed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All infrastructure resources have been successfully destroyed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Resources Removed:**" >> $GITHUB_STEP_SUMMARY
+          echo "- EC2 Instance" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Groups" >> $GITHUB_STEP_SUMMARY
+          echo "- SSH Key Pair" >> $GITHUB_STEP_SUMMARY
+          echo "- Route53 DNS Records" >> $GITHUB_STEP_SUMMARY
