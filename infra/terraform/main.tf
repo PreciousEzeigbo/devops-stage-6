@@ -170,7 +170,6 @@ resource "null_resource" "run_ansible" {
 
   triggers = {
     instance_id = aws_instance.app_server.id
-    inventory   = local_file.ansible_inventory.content
   }
 
   provisioner "local-exec" {
