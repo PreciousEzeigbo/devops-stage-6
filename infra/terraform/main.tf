@@ -147,38 +147,45 @@ resource "aws_eip" "app_eip" {
   depends_on = [aws_instance.app_server]
 }
 
-# Generate Ansible Inventory
-resource "local_file" "ansible_inventory" {
-  content = templatefile("${path.module}/inventory.tpl", {
-    server_ip        = aws_eip.app_eip.public_ip
-    ssh_user         = var.ssh_user
-    ssh_private_key  = var.ssh_private_key_path
-    domain           = var.domain
-    acme_email       = var.acme_email
-    jwt_secret       = var.jwt_secret
-    github_repo      = var.github_repo
-    github_branch    = var.github_branch
-  })
-  filename = "${path.module}/../ansible/inventory/hosts.ini"
-
-  depends_on = [aws_eip.app_eip]
-}
-
-# Trigger Ansible after infrastructure is ready
+# Run Ansible after infrastructure is ready
+# Inventory file is created as a side effect, not tracked in state
 resource "null_resource" "run_ansible" {
   count = var.run_ansible ? 1 : 0
 
   triggers = {
     instance_id = aws_instance.app_server.id
+    always_run  = timestamp()
   }
 
   provisioner "local-exec" {
-    command     = "sleep 30 && cd ${path.module}/../ansible && ansible-playbook -i inventory/hosts.ini playbook.yml"
-    working_dir = path.module
+    command = <<-EOT
+      # Create inventory file (not tracked in state)
+      mkdir -p ${path.module}/../ansible/inventory
+      cat > ${path.module}/../ansible/inventory/hosts.ini <<'INVENTORY'
+[app_servers]
+app_server ansible_host=${aws_eip.app_eip.public_ip} ansible_user=${var.ssh_user} ansible_ssh_private_key_file=${var.ssh_private_key_path}
+
+[app_servers:vars]
+domain=${var.domain}
+acme_email=${var.acme_email}
+jwt_secret=${var.jwt_secret}
+github_repo=${var.github_repo}
+github_branch=${var.github_branch}
+traefik_dashboard_user=${var.traefik_dashboard_user}
+traefik_dashboard_password=${var.traefik_dashboard_password}
+app_directory=/opt/devops-stage-6
+INVENTORY
+
+      # Wait for instance to be ready
+      sleep 30
+      
+      # Run Ansible playbook
+      cd ${path.module}/../ansible && ansible-playbook -i inventory/hosts.ini playbook.yml
+    EOT
   }
 
   depends_on = [
     aws_eip.app_eip,
-    local_file.ansible_inventory
+    aws_instance.app_server
   ]
 }

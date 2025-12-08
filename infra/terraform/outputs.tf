@@ -25,5 +25,5 @@ output "application_url" {
 
 output "inventory_file" {
   description = "Path to generated Ansible inventory"
-  value       = local_file.ansible_inventory.filename
+  value       = "./../ansible/inventory/hosts.ini"
 }
