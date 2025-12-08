@@ -47,10 +47,14 @@
     mode: '0644'
 
 - name: Stop existing containers if configuration changed
-  command: docker compose down
+  command: docker compose down --remove-orphans
   args:
     chdir: "{{ app_directory }}"
   when: config_changed
+  ignore_errors: yes
+
+- name: Remove any conflicting containers
+  shell: docker ps -a --format '{{{{.Names}}}}' | grep -E '(traefik|devops-stage-6)' | xargs -r docker rm -f
   ignore_errors: yes
 
 - name: Pull Docker images
